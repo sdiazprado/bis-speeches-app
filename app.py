@@ -7,6 +7,7 @@ import datetime
 import docx
 from docx import Document
 from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ==========================================
 # CONFIGURACIÓN INICIAL Y ESTILOS
@@ -87,16 +88,11 @@ def add_hyperlink(paragraph, text, url):
     u.set(docx.oxml.shared.qn('w:val'), 'single')
     rPr.append(u)
 
-    # Formato: Negrita
-    b = docx.oxml.shared.OxmlElement('w:b')
-    rPr.append(b)
-
-    # Formato: Tamaño 12 (en la librería se mide en medios puntos, por lo que 24 = 12pt)
+    # Formato: Tamaño 12 (24 medios puntos)
     sz = docx.oxml.shared.OxmlElement('w:sz')
     sz.set(docx.oxml.shared.qn('w:val'), '24')
     rPr.append(sz)
     
-    # Asegurar el tamaño también para caracteres complejos
     szCs = docx.oxml.shared.OxmlElement('w:szCs')
     szCs.set(docx.oxml.shared.qn('w:val'), '24')
     rPr.append(szCs)
@@ -116,37 +112,50 @@ def add_hyperlink(paragraph, text, url):
     paragraph._p.append(hyperlink)
     return hyperlink
 
-def generate_word(dataframe, title="Discursos"):
+def generate_word(dataframe, title="Discursos", subtitle=""):
     doc = Document()
-    doc.add_heading(title, 0)
+    
+    # Título principal centrado
+    heading = doc.add_heading(title, 0)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Subtítulo centrado (Rango de fechas)
+    if subtitle:
+        p_sub = doc.add_paragraph()
+        p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_sub = p_sub.add_run(subtitle)
+        run_sub.font.name = 'Calibri'
+        run_sub.font.size = Pt(12)
+
+    # Añadir un espacio antes de la tabla
+    doc.add_paragraph()
 
     # Tabla sin bordes
     table = doc.add_table(rows=1, cols=2)
     
-    # Encabezados con formato Calibri 12 Negrita
+    # Encabezados con formato Calibri 12
     hdr_cells = table.rows[0].cells
     for idx, header_text in enumerate(['Date', 'Title']):
         p = hdr_cells[idx].paragraphs[0]
         run = p.add_run(header_text)
         run.font.name = 'Calibri'
         run.font.size = Pt(12)
-        run.bold = True
+        # Dejamos los encabezados en negrita para diferenciar del contenido
+        run.bold = True 
 
-    # Llenado de datos
+    # Llenado de datos (Sin negritas)
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
         
-        # Eliminar los "00:00:00" extrayendo solo los 10 primeros caracteres (YYYY-MM-DD)
         date_str = str(row['Date'])[:10]
         
-        # Celda 1: Fecha (Aplicamos Calibri 12 Negrita)
+        # Celda 1: Fecha normal (Calibri 12)
         p_date = row_cells[0].paragraphs[0]
         run_date = p_date.add_run(date_str)
         run_date.font.name = 'Calibri'
         run_date.font.size = Pt(12)
-        run_date.bold = True
         
-        # Celda 2: Título (El formato se inyecta por dentro de add_hyperlink)
+        # Celda 2: Título (El formato normal se inyecta por dentro de add_hyperlink)
         p_title = row_cells[1].paragraphs[0]
         add_hyperlink(p_title, str(row['Title']), str(row['Link']))
 
@@ -266,13 +275,24 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
                     st.success(f"Se encontraron **{len(filtered_df)}** discursos en **{str_meses} {str_anios}**.")
                 
                 with col_boton:
-                    word_file = generate_word(filtered_df, title="BIS Central Bank Speeches")
+                    # Construimos el texto del subtítulo (ej. "Marzo 2026")
+                    str_meses = ", ".join(meses_seleccionados)
+                    str_anios = ", ".join(anios_seleccionados)
+                    subtitulo_fechas = f"{str_meses} {str_anios}"
+                    
+                    # Llamamos a la función pasándole el nuevo parámetro 'subtitle'
+                    word_file = generate_word(
+                        filtered_df, 
+                        title="BIS Central Bank Speeches", 
+                        subtitle=subtitulo_fechas
+                    )
                     st.download_button(
                         label="📄 Descargar en Word",
                         data=word_file,
                         file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
+                    )
                     )
                 
                 # Procesar y mostrar la tabla en pantalla
@@ -296,5 +316,6 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
+
 
 
