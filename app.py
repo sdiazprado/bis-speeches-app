@@ -305,7 +305,7 @@ def load_data_bdf(start_date_str, end_date_str, extract_author=True):
                             autor = "François Villeroy de Galhau" 
                         break
                 
-               titulo_final = f"{autor}: {titulo_raw}" if autor and autor not in titulo_raw else titulo_raw
+                titulo_final = f"{autor}: {titulo_raw}" if autor and autor not in titulo_raw else titulo_raw
             else:
                 titulo_final = titulo_raw
 
@@ -364,7 +364,7 @@ def load_data_generic(urls, base_domain, org_name, extract_author=True):
                                         autor = p.replace(',', '').replace(':', '').replace('By ', '').replace('Watch Live', '').strip()
                                         break
                             
-                            final_title = f"{autor}: {title}" if autor and extract_author and ":" not in title else title
+                            final_title = f"{autor}: {title}" if autor and extract_author and autor not in title else title
                             rows.append({"Date": parsed_date, "Title": final_title, "Link": link, "Organismo": org_name})
                     except: pass
         except: continue
@@ -716,4 +716,5 @@ elif modo_app == "Categorías":
 
     else:
         st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
+
 
