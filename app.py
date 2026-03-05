@@ -292,8 +292,7 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
                         file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
-                    )
-                    )
+                    )           
                 
                 # Procesar y mostrar la tabla en pantalla
                 filtered_df_display = filtered_df.copy()
@@ -316,6 +315,7 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
+
 
 
 
