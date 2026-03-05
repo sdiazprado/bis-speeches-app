@@ -66,6 +66,8 @@ def load_data_bis(extract_author=True):
     df = pd.DataFrame(rows).drop_duplicates(subset=['Link']) if rows else pd.DataFrame()
     if not df.empty:
         df["Date"] = pd.to_datetime(df["Date"])
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
         df = df.sort_values("Date", ascending=False)
     return df
 
@@ -119,6 +121,8 @@ def load_data_bbk(start_date_str, end_date_str, extract_author=True):
     df = pd.DataFrame(rows)
     if not df.empty:
         df["Date"] = pd.to_datetime(df["Date"], format='%d.%m.%Y', errors='coerce')
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
         df = df.sort_values("Date", ascending=False)
     return df
 
@@ -188,6 +192,8 @@ def load_data_bde(start_date_str, end_date_str, extract_author=True):
     df = pd.DataFrame(rows)
     if not df.empty:
         df["Date"] = pd.to_datetime(df["Date"], format='%d/%m/%Y', errors='coerce')
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
         df = df.sort_values("Date", ascending=False)
     return df
 
@@ -244,6 +250,8 @@ def load_data_fed(anios_num, extract_author=True):
     df = pd.DataFrame(rows).drop_duplicates(subset=['Link']) if rows else pd.DataFrame()
     if not df.empty:
         df["Date"] = pd.to_datetime(df["Date"])
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
         df = df.sort_values("Date", ascending=False)
     return df
 
@@ -324,6 +332,94 @@ def load_data_bdf(start_date_str, end_date_str, extract_author=True):
     df = pd.DataFrame(rows)
     if not df.empty:
         df["Date"] = pd.to_datetime(df["Date"])
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
+        df = df.sort_values("Date", ascending=False)
+    return df
+
+@st.cache_data(show_spinner=False)
+def load_data_bm(start_date_str, end_date_str, extract_author=True):
+    base_url = "https://openknowledge.worldbank.org/server/api/discover/search/objects"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try: start_date = datetime.datetime.strptime(start_date_str, '%d.%m.%Y')
+    except: start_date = datetime.datetime(2000, 1, 1)
+    
+    rows = []
+    page = 0
+    size = 20
+    
+    while True:
+        params = {
+            'scope': 'b6a50016-276d-56d3-bbe5-891c8d18db24',
+            'sort': 'dc.date.issued,DESC',
+            'page': page,
+            'size': size
+        }
+        try:
+            response = requests.get(base_url, headers=headers, params=params, timeout=12)
+            data = response.json()
+            objects = data.get('_embedded', {}).get('searchResult', {}).get('_embedded', {}).get('objects', [])
+            if not objects: break
+        except:
+            break
+            
+        items_found = 0
+        for obj in objects:
+            try:
+                item = obj.get('_embedded', {}).get('indexableObject', {})
+                metadata = item.get('metadata', {})
+                
+                title = metadata.get('dc.title', [{'value': ''}])[0].get('value', '')
+                date_str = metadata.get('dc.date.issued', [{'value': ''}])[0].get('value', '')
+                
+                parsed_date = None
+                if date_str:
+                    try: parsed_date = parser.parse(date_str)
+                    except: pass
+                
+                if not parsed_date: continue
+                
+                handle = metadata.get('dc.identifier.uri', [{'value': ''}])[0].get('value', '')
+                link = handle if handle else f"https://openknowledge.worldbank.org/entities/publication/{item.get('id', '')}"
+                
+                autor = ""
+                if extract_author:
+                    authors_list = metadata.get('dc.contributor.author', [])
+                    if authors_list:
+                        autor_raw = authors_list[0].get('value', '')
+                        if ',' in autor_raw:
+                            parts = autor_raw.split(',')
+                            autor = f"{parts[1].strip()} {parts[0].strip()}"
+                        else:
+                            autor = autor_raw
+                    titulo_final = f"{autor}: {title}" if autor and autor not in title else title
+                else:
+                    titulo_final = title
+                    
+                if not any(r['Link'] == link for r in rows):
+                    rows.append({"Date": parsed_date, "Title": titulo_final, "Link": link, "Organismo": "BM"})
+                    items_found += 1
+            except:
+                continue
+                
+        should_break = False
+        if rows:
+            # Check if the date has timezone info before comparison
+            last_date = rows[-1]['Date']
+            if last_date.tzinfo is not None:
+                last_date = last_date.replace(tzinfo=None)
+            if last_date < start_date:
+                should_break = True
+                
+        if items_found == 0 or should_break: break
+        page += 1
+        time.sleep(0.3)
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["Date"] = pd.to_datetime(df["Date"])
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
         df = df.sort_values("Date", ascending=False)
     return df
 
@@ -371,6 +467,8 @@ def load_data_generic(urls, base_domain, org_name, extract_author=True):
     df = pd.DataFrame(rows).drop_duplicates(subset=['Link']) if rows else pd.DataFrame()
     if not df.empty:
         df["Date"] = pd.to_datetime(df["Date"])
+        if df["Date"].dt.tz is not None:
+            df["Date"] = df["Date"].dt.tz_convert(None)
         df = df.sort_values("Date", ascending=False)
     return df
 
@@ -496,7 +594,6 @@ if modo_app == "Categorías":
 st.sidebar.info("Herramienta de extracción automatizada para la elaboración del boletín mensual.")
 
 mapeo_discursos = {
-    "BM": (["https://openknowledge.worldbank.org/communities/b6a50016-276d-56d3-bbe5-891c8d18db24?spc.sf=dc.date.issued&spc.sd=DESC"], "https://openknowledge.worldbank.org"),
     "BoC (Canadá)": (["https://www.bankofcanada.ca/press/speeches/"], "https://www.bankofcanada.ca"),
     "BoE (Inglaterra)": (["https://www.bankofengland.co.uk/news/speeches"], "https://www.bankofengland.co.uk"),
     "BoJ (Japón)": (["https://www.boj.or.jp/en/about/press/index.htm"], "https://www.boj.or.jp"),
@@ -559,6 +656,8 @@ if modo_app == "Boletín":
                     df_org = load_data_fed(anios_num, extract_author=True)
                 elif org == "BdF (Francia)":
                     df_org = load_data_bdf(start_date_str, end_date_str, extract_author=True)
+                elif org == "BM":
+                    df_org = load_data_bm(start_date_str, end_date_str, extract_author=True)
                 elif org in mapeo_discursos:
                     urls, base = mapeo_discursos[org]
                     df_org = load_data_generic(urls, base, org, extract_author=True)
@@ -659,6 +758,8 @@ elif modo_app == "Categorías":
                         df_org = load_data_fed(anios_num, extract_author=debe_extraer_autor)
                     elif org == "BdF (Francia)":
                         df_org = load_data_bdf(start_date_str, end_date_str, extract_author=debe_extraer_autor)
+                    elif org == "BM":
+                        df_org = load_data_bm(start_date_str, end_date_str, extract_author=debe_extraer_autor)
                     elif org in mapeo_discursos and tipo_doc == "Discursos":
                         urls, base = mapeo_discursos[org]
                         df_org = load_data_generic(urls, base, org, extract_author=debe_extraer_autor)
