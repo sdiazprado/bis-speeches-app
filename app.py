@@ -11,12 +11,8 @@ from docx import Document
 # CONFIGURACIÓN INICIAL Y ESTILOS
 # ==========================================
 st.set_page_config(page_title="Boletín Mensual - Banxico", layout="wide")
-# ==========================================
-# CONFIGURACIÓN INICIAL Y ESTILOS
-# ==========================================
-st.set_page_config(page_title="Boletín Mensual - Banxico", layout="wide")
 
-# Inyección de CSS para cambiar el color de los botones al Azul Banxico
+# Inyección de CSS para cambiar el color al Azul Banxico (#00205B)
 st.markdown("""
     <style>
     /* Estilo para los botones principales y de descarga */
@@ -29,8 +25,14 @@ st.markdown("""
         background-color: #00153D !important;
         color: white !important;
     }
+    /* Estilo para las etiquetas (tags) de los selectores múltiples (meses y años) */
+    span[data-baseweb="tag"] {
+        background-color: #00205B !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
+
 # ==========================================
 # FUNCIONES AUXILIARES (BACKEND)
 # ==========================================
@@ -96,7 +98,7 @@ def generate_word(dataframe, title="Discursos"):
     doc.add_heading(title, 0)
 
     table = doc.add_table(rows=1, cols=2)
-    table.style = 'Table Grid'
+    # Al no asignarle un estilo como 'Table Grid', la tabla aparecerá sin bordes
     
     hdr_cells = table.rows[0].cells
     hdr_cells[0].text = 'Date'
@@ -125,11 +127,10 @@ def generate_word(dataframe, title="Discursos"):
 # ==========================================
 
 # 1. Logo institucional en la barra lateral
-# NOTA: Sube un archivo llamado 'logo_banxico.png' a la misma carpeta de tu app en GitHub
 try:
     st.sidebar.image("logo_banxico.png", use_column_width=True)
 except:
-    st.sidebar.markdown("### 🏦 BANCO DE MÉXICO") # Placeholder si no encuentra la imagen
+    st.sidebar.markdown("### 🏦 BANCO DE MÉXICO")
 
 st.sidebar.markdown("---")
 st.sidebar.header("Menú de Navegación")
@@ -140,12 +141,11 @@ tipo_doc = st.sidebar.selectbox(
     ["Reportes", "Publicaciones Institucionales", "Investigación", "Discursos"]
 )
 
-# 3. Selector de Organismo (depende del tipo de documento)
+# 3. Selector de Organismo
 if tipo_doc == "Discursos":
-    organismos_discursos = ["BIS", "FMI", "BCE", "Fed"] # Puedes agregar más
+    organismos_discursos = ["BIS", "FMI", "BCE", "Fed"]
     organismo_seleccionado = st.sidebar.selectbox("Selecciona el Organismo", organismos_discursos)
 else:
-    # Placeholder para las otras categorías
     organismos_generales = ["BM", "BID", "CEF", "FEM", "FMI", "BPI", "OCDE", "CEMLA"]
     organismo_seleccionado = st.sidebar.selectbox("Selecciona el Organismo", organismos_generales)
 
@@ -157,7 +157,6 @@ st.sidebar.info("Herramienta de extracción automatizada para la elaboración de
 # CONTENIDO PRINCIPAL (MAIN PAGE)
 # ==========================================
 
-# Portada Institucional
 st.title("Boletín Mensual de Organismos Internacionales")
 st.markdown(f"**Explorador de {tipo_doc} - {organismo_seleccionado}**")
 st.markdown("---")
@@ -171,21 +170,16 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
     
     st.subheader("1. Selecciona el Mes y Año")
 
-    # 1. Cargamos la base de datos PRIMERO para saber qué años existen
-    # (Al tener caché, esto es instantáneo después de la primera carga)
     df = load_data_bis()
 
-    # 2. Extraemos los años únicos disponibles en la base de datos
     anios_disponibles = df["Date"].dt.year.dropna().unique().tolist()
-    anios_disponibles.sort(reverse=True) # Orden descendente
+    anios_disponibles.sort(reverse=True)
     anios_str = [str(int(a)) for a in anios_disponibles]
 
-    # Forzar que el 2026 sea el primero en la lista visual (si existe en los datos)
     if "2026" in anios_str:
         anios_str.remove("2026")
         anios_str.insert(0, "2026")
 
-    # Diccionario de meses
     meses_dict = {
         "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4,
         "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8,
@@ -208,29 +202,41 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
 
     buscar = st.button("🔍 Buscar", type="primary")
 
-    # Lógica de ejecución
     if buscar or "bis_df_filtrado" in st.session_state:
         
         if not meses_seleccionados or not anios_seleccionados:
             st.warning("⚠️ Por favor, selecciona al menos un mes y un año para realizar la búsqueda.")
         else:
-            # Convertimos las selecciones a números
             meses_num = [meses_dict[m] for m in meses_seleccionados]
             anios_num = [int(a) for a in anios_seleccionados]
             
-            # Filtramos el DataFrame que ya habíamos cargado arriba
             mask = (df["Date"].dt.year.isin(anios_num)) & (df["Date"].dt.month.isin(meses_num))
             filtered_df = df[mask]
             
             st.session_state["bis_df_filtrado"] = filtered_df
 
-            st.subheader("2. Resultados de la búsqueda")
-            
             if len(filtered_df) > 0:
-                str_meses = ", ".join(meses_seleccionados)
-                str_anios = ", ".join(anios_seleccionados)
-                st.success(f"Se encontraron **{len(filtered_df)}** discursos en **{str_meses} {str_anios}**.")
+                st.subheader("2. Resultados de la búsqueda")
                 
+                # Columnas para el mensaje de éxito y el botón de descarga
+                col_mensaje, col_boton = st.columns([3, 1])
+                
+                with col_mensaje:
+                    str_meses = ", ".join(meses_seleccionados)
+                    str_anios = ", ".join(anios_seleccionados)
+                    st.success(f"Se encontraron **{len(filtered_df)}** discursos en **{str_meses} {str_anios}**.")
+                
+                with col_boton:
+                    word_file = generate_word(filtered_df, title="BIS Central Bank Speeches")
+                    st.download_button(
+                        label="📄 Descargar en Word",
+                        data=word_file,
+                        file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+                
+                # Procesar y mostrar la tabla en pantalla
                 filtered_df_display = filtered_df.copy()
                 filtered_df_display["Date"] = filtered_df_display["Date"].dt.strftime('%Y-%m-%d')
                 filtered_df_display["Title"] = filtered_df_display.apply(
@@ -242,24 +248,12 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
                     unsafe_allow_html=True
                 )
 
-                st.markdown("---")
-                st.subheader("3. Exportar Datos")
-                
-                word_file = generate_word(filtered_df, title="BIS Central Bank Speeches")
-                st.download_button(
-                    label="📄 Descargar en Word",
-                    data=word_file,
-                    file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
             else:
                 st.warning("No hay discursos del BIS para las fechas seleccionadas. Intenta con otro mes.")
     else:
-        st.info("👆 Selecciona el mes y año arriba y presiona **'Buscar Discursos del BIS'**.")# MÓDULOS EN CONSTRUCCIÓN (Placeholder para el resto del menú)
+        st.info("👆 Selecciona el mes y año arriba y presiona **'Buscar'**.")
+
+# MÓDULOS EN CONSTRUCCIÓN (Placeholder para el resto del menú)
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
-
-
-
-
