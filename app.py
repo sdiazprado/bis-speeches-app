@@ -148,12 +148,25 @@ st.markdown("---")
 # ==========================================
 
 # MÓDULO: DISCURSOS -> BIS
-# MÓDULO: DISCURSOS -> BIS
 if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
     
     st.subheader("1. Selecciona el Mes y Año")
 
-    # Diccionario para mapear el nombre del mes con su número en fechas
+    # 1. Cargamos la base de datos PRIMERO para saber qué años existen
+    # (Al tener caché, esto es instantáneo después de la primera carga)
+    df = load_data_bis()
+
+    # 2. Extraemos los años únicos disponibles en la base de datos
+    anios_disponibles = df["Date"].dt.year.dropna().unique().tolist()
+    anios_disponibles.sort(reverse=True) # Orden descendente
+    anios_str = [str(int(a)) for a in anios_disponibles]
+
+    # Forzar que el 2026 sea el primero en la lista visual (si existe en los datos)
+    if "2026" in anios_str:
+        anios_str.remove("2026")
+        anios_str.insert(0, "2026")
+
+    # Diccionario de meses
     meses_dict = {
         "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4,
         "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8,
@@ -162,18 +175,16 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
 
     col1, col2 = st.columns(2)
     with col1:
-        # Selector múltiple de meses
         meses_seleccionados = st.multiselect(
             "Mes(es)",
             options=list(meses_dict.keys()),
-            default=["Marzo"] # Puedes dejarlo vacío usando default=[]
+            default=[] 
         )
     with col2:
-        # Selector múltiple de años con 2026 por defecto
         anios_seleccionados = st.multiselect(
             "Año(s)",
-            options=["2023", "2024", "2025", "2026", "2027"],
-            default=["2026"]
+            options=anios_str,
+            default=["2026"] if "2026" in anios_str else []
         )
 
     buscar = st.button("🔍 Buscar Discursos del BIS", type="primary")
@@ -181,17 +192,14 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
     # Lógica de ejecución
     if buscar or "bis_df_filtrado" in st.session_state:
         
-        # Validación de que al menos haya un mes y un año seleccionado
         if not meses_seleccionados or not anios_seleccionados:
             st.warning("⚠️ Por favor, selecciona al menos un mes y un año para realizar la búsqueda.")
         else:
-            df = load_data_bis()
-            
-            # Convertimos las selecciones a números para filtrar
+            # Convertimos las selecciones a números
             meses_num = [meses_dict[m] for m in meses_seleccionados]
             anios_num = [int(a) for a in anios_seleccionados]
             
-            # Filtramos extrayendo el mes y año de la columna 'Date'
+            # Filtramos el DataFrame que ya habíamos cargado arriba
             mask = (df["Date"].dt.year.isin(anios_num)) & (df["Date"].dt.month.isin(meses_num))
             filtered_df = df[mask]
             
@@ -222,16 +230,15 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
                 st.download_button(
                     label="📄 Descargar en Word",
                     data=word_file,
-                    # Nombramos el archivo dinámicamente según la selección
                     file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
             else:
                 st.warning("No hay discursos del BIS para las fechas seleccionadas. Intenta con otro mes.")
     else:
-        st.info("👆 Selecciona el mes y año arriba y presiona **'Buscar Discursos del BIS'**.")
-# MÓDULOS EN CONSTRUCCIÓN (Placeholder para el resto del menú)
+        st.info("👆 Selecciona el mes y año arriba y presiona **'Buscar Discursos del BIS'**.")# MÓDULOS EN CONSTRUCCIÓN (Placeholder para el resto del menú)
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
+
 
