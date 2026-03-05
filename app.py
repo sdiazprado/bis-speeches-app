@@ -70,6 +70,7 @@ def load_data_bis():
         df = df.sort_values("Date", ascending=False)
     
     return df
+
 @st.cache_data(show_spinner="Navegando y extrayendo discursos del BBk (Alemania)...")
 def load_data_bbk(start_date_str, end_date_str):
     # El BBk espera las fechas en formato DD.MM.YYYY
@@ -141,6 +142,7 @@ def load_data_bbk(start_date_str, end_date_str):
         df = df.sort_values("Date", ascending=False)
         
     return df
+
 def add_hyperlink(paragraph, text, url):
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
@@ -185,7 +187,7 @@ def add_hyperlink(paragraph, text, url):
     paragraph._p.append(hyperlink)
     return hyperlink
 
-    def generate_word(dataframe, title="Discursos", subtitle=""):
+def generate_word(dataframe, title="Discursos", subtitle=""):
     doc = Document()
     
     # Título principal centrado
@@ -246,6 +248,7 @@ def add_hyperlink(paragraph, text, url):
     doc.save(output)
     output.seek(0)
     return output
+
 # ==========================================
 # INTERFAZ DE USUARIO (SIDEBAR Y NAVEGACIÓN)
 # ==========================================
@@ -265,11 +268,10 @@ tipo_doc = st.sidebar.selectbox(
     ["Reportes", "Publicaciones Institucionales", "Investigación", "Discursos"]
 )
 
-# 3. Selector de Organismo (Listas exactas basadas en tus imágenes)
-# 3. Selector de Organismo (Listas exactas basadas en tus imágenes)
+# 3. Selector de Organismo
 if tipo_doc == "Discursos":
     organismos = [
-        "Todos", # <-- AGREGAMOS ESTA OPCIÓN
+        "Todos",
         "BBk (Alemania)", "BdE (España)", "BdF (Francia)", "BM", 
         "BoC (Canadá)", "BoE (Inglaterra)", "BoJ (Japón)", "BPI", 
         "CEF", "ECB (Europa)", "Fed (Estados Unidos)", "FMI", "PBoC (China)"
@@ -298,6 +300,7 @@ st.markdown("---")
 # ==========================================
 # MÓDULOS DE EXTRACCIÓN
 # ==========================================
+
 # MÓDULO: DISCURSOS -> TODOS
 if tipo_doc == "Discursos" and organismo_seleccionado == "Todos":
     
@@ -353,13 +356,10 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "Todos":
                         df_bbk_fil['Organismo'] = 'BBk'
                         dfs_combinados.append(df_bbk_fil)
 
-            # --- (Aquí iremos agregando FMI, BdE, etc. en el futuro) ---
-
             # --- Consolidar Todo ---
             if dfs_combinados:
                 combined_df = pd.concat(dfs_combinados, ignore_index=True)
                 combined_df = combined_df.sort_values("Date", ascending=False)
-                # Reordenamos las columnas para que Organismo quede en medio
                 combined_df = combined_df[['Date', 'Organismo', 'Title', 'Link']]
             else:
                 combined_df = pd.DataFrame()
@@ -395,11 +395,8 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "Todos":
             else:
                 st.warning("No se encontraron discursos de ningún organismo para las fechas seleccionadas.")
 
-# Asegúrate de que el bloque de BPI empiece con 'elif' ahora:
+# MÓDULO: DISCURSOS -> BPI
 elif tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
-# ... resto de tu código
-# MÓDULO: DISCURSOS -> BPI (Antes BIS)
-if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
     
     st.subheader("1. Selecciona el Mes y Año")
     df = load_data_bis()
@@ -420,22 +417,13 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
 
     col1, col2 = st.columns(2)
     with col1:
-        meses_seleccionados = st.multiselect(
-            "Mes(es)",
-            options=list(meses_dict.keys()),
-            default=[] 
-        )
+        meses_seleccionados = st.multiselect("Mes(es)", options=list(meses_dict.keys()), default=[])
     with col2:
-        anios_seleccionados = st.multiselect(
-            "Año(s)",
-            options=anios_str,
-            default=["2026"] if "2026" in anios_str else []
-        )
+        anios_seleccionados = st.multiselect("Año(s)", options=anios_str, default=["2026"] if "2026" in anios_str else [])
 
     buscar = st.button("🔍 Buscar", type="primary")
 
     if buscar or "bis_df_filtrado" in st.session_state:
-        
         if not meses_seleccionados or not anios_seleccionados:
             st.warning("⚠️ Por favor, selecciona al menos un mes y un año para realizar la búsqueda.")
         else:
@@ -450,58 +438,39 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
             if len(filtered_df) > 0:
                 st.subheader("2. Resultados de la búsqueda")
                 
-                # Columnas para el mensaje de éxito y el botón de descarga
                 col_mensaje, col_boton = st.columns([3, 1])
-                
                 with col_mensaje:
                     str_meses = ", ".join(meses_seleccionados)
                     str_anios = ", ".join(anios_seleccionados)
                     st.success(f"Se encontraron **{len(filtered_df)}** discursos en **{str_meses} {str_anios}**.")
                 
                 with col_boton:
-                    # Construimos el texto del subtítulo (ej. "Marzo 2026")
-                    str_meses = ", ".join(meses_seleccionados)
-                    str_anios = ", ".join(anios_seleccionados)
                     subtitulo_fechas = f"{str_meses} {str_anios}"
-                    
-                    # Llamamos a la función pasándole el nuevo parámetro 'subtitle'
-                    word_file = generate_word(
-                        filtered_df, 
-                        title="BIS Central Bank Speeches", 
-                        subtitle=subtitulo_fechas
-                    )
+                    word_file = generate_word(filtered_df, title="BPI Central Bank Speeches", subtitle=subtitulo_fechas)
                     st.download_button(
                         label="📄 Descargar en Word",
                         data=word_file,
-                        file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
+                        file_name=f"bpi_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
-                    )           
+                    )            
                 
-                # Procesar y mostrar la tabla en pantalla
                 filtered_df_display = filtered_df.copy()
                 filtered_df_display["Date"] = filtered_df_display["Date"].dt.strftime('%Y-%m-%d')
-                filtered_df_display["Title"] = filtered_df_display.apply(
-                    lambda x: f"[{x['Title']}]({x['Link']})", axis=1
-                )
+                filtered_df_display["Title"] = filtered_df_display.apply(lambda x: f"[{x['Title']}]({x['Link']})", axis=1)
 
-                st.markdown(
-                    filtered_df_display[["Date", "Title"]].to_markdown(index=False),
-                    unsafe_allow_html=True
-                )
-
+                st.markdown(filtered_df_display[["Date", "Title"]].to_markdown(index=False), unsafe_allow_html=True)
             else:
-                st.warning("No hay discursos del BIS para las fechas seleccionadas. Intenta con otro mes.")
+                st.warning("No hay discursos del BPI para las fechas seleccionadas.")
     else:
         st.info("👆 Selecciona el mes y año arriba y presiona **'Buscar'**.")
+
 # MÓDULO: DISCURSOS -> BBk (Alemania)
 elif tipo_doc == "Discursos" and organismo_seleccionado == "BBk (Alemania)":
     
     st.subheader("1. Selecciona el Mes y Año")
 
-    # A diferencia del BIS, definimos los años fijos para no hacer scraping de todo el histórico
     anios_str = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"]
-
     meses_dict = {
         "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4,
         "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8,
@@ -510,29 +479,19 @@ elif tipo_doc == "Discursos" and organismo_seleccionado == "BBk (Alemania)":
 
     col1, col2 = st.columns(2)
     with col1:
-        meses_seleccionados = st.multiselect(
-            "Mes(es)",
-            options=list(meses_dict.keys()),
-            default=[] 
-        )
+        meses_seleccionados = st.multiselect("Mes(es)", options=list(meses_dict.keys()), default=[])
     with col2:
-        anios_seleccionados = st.multiselect(
-            "Año(s)",
-            options=anios_str,
-            default=["2026"]
-        )
+        anios_seleccionados = st.multiselect("Año(s)", options=anios_str, default=["2026"])
 
     buscar = st.button("🔍 Buscar Discursos del BBk", type="primary")
 
     if buscar or "bbk_df_filtrado" in st.session_state:
-        
         if not meses_seleccionados or not anios_seleccionados:
             st.warning("⚠️ Por favor, selecciona al menos un mes y un año para realizar la búsqueda.")
         else:
             meses_num = [meses_dict[m] for m in meses_seleccionados]
             anios_num = [int(a) for a in anios_seleccionados]
             
-            # Calculamos los extremos de fechas para pedirle solo lo necesario al servidor
             min_month, max_month = min(meses_num), max(meses_num)
             min_year, max_year = min(anios_num), max(anios_num)
             
@@ -540,11 +499,9 @@ elif tipo_doc == "Discursos" and organismo_seleccionado == "BBk (Alemania)":
             last_day = calendar.monthrange(max_year, max_month)[1]
             end_date_str = f"{last_day:02d}.{max_month:02d}.{max_year}"
 
-            # Llamamos a nuestra nueva función scraper
             df = load_data_bbk(start_date_str, end_date_str)
             
             if not df.empty:
-                # Filtramos localmente para asegurar precisión (ej. si eligieron Enero y Marzo, descartamos Febrero)
                 mask = (df["Date"].dt.year.isin(anios_num)) & (df["Date"].dt.month.isin(meses_num))
                 filtered_df = df[mask]
             else:
@@ -563,12 +520,7 @@ elif tipo_doc == "Discursos" and organismo_seleccionado == "BBk (Alemania)":
                 
                 with col_boton:
                     subtitulo_fechas = f"{str_meses} {str_anios}"
-                    # Reutilizamos la función del Word que ya construimos antes
-                    word_file = generate_word(
-                        filtered_df, 
-                        title="BBk Central Bank Speeches", 
-                        subtitle=subtitulo_fechas
-                    )
+                    word_file = generate_word(filtered_df, title="BBk Central Bank Speeches", subtitle=subtitulo_fechas)
                     st.download_button(
                         label="📄 Descargar en Word",
                         data=word_file,
@@ -579,14 +531,9 @@ elif tipo_doc == "Discursos" and organismo_seleccionado == "BBk (Alemania)":
                 
                 filtered_df_display = filtered_df.copy()
                 filtered_df_display["Date"] = filtered_df_display["Date"].dt.strftime('%Y-%m-%d')
-                filtered_df_display["Title"] = filtered_df_display.apply(
-                    lambda x: f"[{x['Title']}]({x['Link']})", axis=1
-                )
+                filtered_df_display["Title"] = filtered_df_display.apply(lambda x: f"[{x['Title']}]({x['Link']})", axis=1)
 
-                st.markdown(
-                    filtered_df_display[["Date", "Title"]].to_markdown(index=False),
-                    unsafe_allow_html=True
-                )
+                st.markdown(filtered_df_display[["Date", "Title"]].to_markdown(index=False), unsafe_allow_html=True)
             else:
                 st.warning("No hay discursos del BBk para las fechas seleccionadas.")
 
@@ -594,9 +541,3 @@ elif tipo_doc == "Discursos" and organismo_seleccionado == "BBk (Alemania)":
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
-
-
-
-
-
-
