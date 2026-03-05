@@ -121,7 +121,6 @@ def generate_word(dataframe, title="Discursos"):
     output.seek(0)
     return output
 
-
 # ==========================================
 # INTERFAZ DE USUARIO (SIDEBAR Y NAVEGACIÓN)
 # ==========================================
@@ -141,13 +140,21 @@ tipo_doc = st.sidebar.selectbox(
     ["Reportes", "Publicaciones Institucionales", "Investigación", "Discursos"]
 )
 
-# 3. Selector de Organismo
+# 3. Selector de Organismo (Listas exactas basadas en tus imágenes)
 if tipo_doc == "Discursos":
-    organismos_discursos = ["BIS", "FMI", "BCE", "Fed"]
-    organismo_seleccionado = st.sidebar.selectbox("Selecciona el Organismo", organismos_discursos)
-else:
-    organismos_generales = ["BM", "BID", "CEF", "FEM", "FMI", "BPI", "OCDE", "CEMLA"]
-    organismo_seleccionado = st.sidebar.selectbox("Selecciona el Organismo", organismos_generales)
+    organismos = [
+        "BBk (Alemania)", "BdE (España)", "BdF (Francia)", "BM", 
+        "BoC (Canadá)", "BoE (Inglaterra)", "BoJ (Japón)", "BPI", 
+        "CEF", "ECB (Europa)", "Fed (Estados Unidos)", "FMI", "PBoC (China)"
+    ]
+elif tipo_doc == "Reportes":
+    organismos = ["BID", "BM", "BPI", "CEF", "FEM", "OCDE"]
+elif tipo_doc == "Investigación":
+    organismos = ["BID", "BM", "BPI", "CEMLA", "FMI", "OCDE"]
+elif tipo_doc == "Publicaciones Institucionales":
+    organismos = ["BM", "BPI", "CEF", "CEMLA", "FMI", "G20", "OCDE", "OEI"]
+
+organismo_seleccionado = st.sidebar.selectbox("Selecciona el Organismo", organismos)
 
 st.sidebar.markdown("---")
 st.sidebar.info("Herramienta de extracción automatizada para la elaboración del boletín mensual.")
@@ -165,11 +172,10 @@ st.markdown("---")
 # MÓDULOS DE EXTRACCIÓN
 # ==========================================
 
-# MÓDULO: DISCURSOS -> BIS
-if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
+# MÓDULO: DISCURSOS -> BPI (Antes BIS)
+if tipo_doc == "Discursos" and organismo_seleccionado == "BPI":
     
     st.subheader("1. Selecciona el Mes y Año")
-
     df = load_data_bis()
 
     anios_disponibles = df["Date"].dt.year.dropna().unique().tolist()
@@ -257,3 +263,4 @@ if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
+
