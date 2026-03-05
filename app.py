@@ -148,63 +148,90 @@ st.markdown("---")
 # ==========================================
 
 # MÓDULO: DISCURSOS -> BIS
+# MÓDULO: DISCURSOS -> BIS
 if tipo_doc == "Discursos" and organismo_seleccionado == "BIS":
     
-    st.subheader("1. Selecciona el rango de fechas")
+    st.subheader("1. Selecciona el Mes y Año")
 
-    hoy = datetime.date.today()
-    hace_un_mes = hoy - datetime.timedelta(days=30)
+    # Diccionario para mapear el nombre del mes con su número en fechas
+    meses_dict = {
+        "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4,
+        "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8,
+        "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12
+    }
 
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Fecha de inicio", hace_un_mes)
+        # Selector múltiple de meses
+        meses_seleccionados = st.multiselect(
+            "Mes(es)",
+            options=list(meses_dict.keys()),
+            default=["Marzo"] # Puedes dejarlo vacío usando default=[]
+        )
     with col2:
-        end_date = st.date_input("Fecha de fin", hoy)
+        # Selector múltiple de años con 2026 por defecto
+        anios_seleccionados = st.multiselect(
+            "Año(s)",
+            options=["2023", "2024", "2025", "2026", "2027"],
+            default=["2026"]
+        )
 
     buscar = st.button("🔍 Buscar Discursos del BIS", type="primary")
 
-    # Lógica de ejecución usando una key única en session_state para evitar conflictos
+    # Lógica de ejecución
     if buscar or "bis_df_filtrado" in st.session_state:
         
-        df = load_data_bis()
-        
-        mask = (df["Date"].dt.date >= start_date) & (df["Date"].dt.date <= end_date)
-        filtered_df = df[mask]
-        
-        st.session_state["bis_df_filtrado"] = filtered_df
-
-        st.subheader("2. Resultados de la búsqueda")
-        
-        if len(filtered_df) > 0:
-            st.success(f"Se encontraron **{len(filtered_df)}** discursos entre {start_date} y {end_date}.")
-            
-            filtered_df_display = filtered_df.copy()
-            filtered_df_display["Date"] = filtered_df_display["Date"].dt.strftime('%Y-%m-%d')
-            filtered_df_display["Title"] = filtered_df_display.apply(
-                lambda x: f"[{x['Title']}]({x['Link']})", axis=1
-            )
-
-            st.markdown(
-                filtered_df_display[["Date", "Title"]].to_markdown(index=False),
-                unsafe_allow_html=True
-            )
-
-            st.markdown("---")
-            st.subheader("3. Exportar Datos")
-            
-            word_file = generate_word(filtered_df, title="BIS Central Bank Speeches")
-            st.download_button(
-                label="📄 Descargar en Word",
-                data=word_file,
-                file_name=f"bis_speeches_{start_date}_to_{end_date}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+        # Validación de que al menos haya un mes y un año seleccionado
+        if not meses_seleccionados or not anios_seleccionados:
+            st.warning("⚠️ Por favor, selecciona al menos un mes y un año para realizar la búsqueda.")
         else:
-            st.warning("No hay discursos del BIS en el rango de fechas seleccionado. Intenta ampliar tu búsqueda.")
-    else:
-        st.info("👆 Selecciona las fechas arriba y presiona **'Buscar Discursos del BIS'**.")
+            df = load_data_bis()
+            
+            # Convertimos las selecciones a números para filtrar
+            meses_num = [meses_dict[m] for m in meses_seleccionados]
+            anios_num = [int(a) for a in anios_seleccionados]
+            
+            # Filtramos extrayendo el mes y año de la columna 'Date'
+            mask = (df["Date"].dt.year.isin(anios_num)) & (df["Date"].dt.month.isin(meses_num))
+            filtered_df = df[mask]
+            
+            st.session_state["bis_df_filtrado"] = filtered_df
 
+            st.subheader("2. Resultados de la búsqueda")
+            
+            if len(filtered_df) > 0:
+                str_meses = ", ".join(meses_seleccionados)
+                str_anios = ", ".join(anios_seleccionados)
+                st.success(f"Se encontraron **{len(filtered_df)}** discursos en **{str_meses} {str_anios}**.")
+                
+                filtered_df_display = filtered_df.copy()
+                filtered_df_display["Date"] = filtered_df_display["Date"].dt.strftime('%Y-%m-%d')
+                filtered_df_display["Title"] = filtered_df_display.apply(
+                    lambda x: f"[{x['Title']}]({x['Link']})", axis=1
+                )
+
+                st.markdown(
+                    filtered_df_display[["Date", "Title"]].to_markdown(index=False),
+                    unsafe_allow_html=True
+                )
+
+                st.markdown("---")
+                st.subheader("3. Exportar Datos")
+                
+                word_file = generate_word(filtered_df, title="BIS Central Bank Speeches")
+                st.download_button(
+                    label="📄 Descargar en Word",
+                    data=word_file,
+                    # Nombramos el archivo dinámicamente según la selección
+                    file_name=f"bis_speeches_{'_'.join(meses_seleccionados)}_{'_'.join(anios_seleccionados)}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            else:
+                st.warning("No hay discursos del BIS para las fechas seleccionadas. Intenta con otro mes.")
+    else:
+        st.info("👆 Selecciona el mes y año arriba y presiona **'Buscar Discursos del BIS'**.")
 # MÓDULOS EN CONSTRUCCIÓN (Placeholder para el resto del menú)
 else:
     st.info(f"El extractor de **{tipo_doc}** para **{organismo_seleccionado}** está en construcción.")
     st.write("Próximamente podrás extraer estos documentos de forma automatizada.")
+
