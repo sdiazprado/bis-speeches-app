@@ -417,6 +417,187 @@ def load_pub_inst_bpi(start_date_str, end_date_str):
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values("Date", ascending=False)
     return df
+@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False)
+def load_press_releases_fmi(start_date_str, end_date_str):
+    """Extractor FMI - Exclusivo para Press Releases vía news.json"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*'
+    }
+    
+    try: start_date = datetime.datetime.strptime(start_date_str, '%d.%m.%Y')
+    except: start_date = datetime.datetime(2000, 1, 1)
+    
+    rows = []
+    
+    # 1. CAZADOR DE BUILD ID (Usamos la página de news para asegurar la versión)
+    build_id = "OPXKbpp2La91iW-gTVkBX"
+    try:
+        res_html = requests.get("https://www.imf.org/en/news", headers=headers, timeout=15)
+        match = re.search(r'"buildId":"([^"]+)"', res_html.text)
+        if match:
+            build_id = match.group(1)
+    except:
+        pass
+
+    # 2. CONEXIÓN AL JSON DE NOTICIAS
+    url_json = f"https://www.imf.org/_next/data/{build_id}/en/news.json"
+    
+    try:
+        res = requests.get(url_json, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            
+            # Buscador recursivo para atrapar cualquier objeto que tenga formato de noticia
+            def extraer_noticias(obj):
+                if isinstance(obj, dict):
+                    # Si el diccionario tiene URL, href y un título, es una noticia
+                    if "url" in obj and isinstance(obj["url"], dict) and "href" in obj["url"] and "title" in obj:
+                        yield obj
+                    for k, v in obj.items():
+                        yield from extraer_noticias(v)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        yield from extraer_noticias(item)
+
+            for item in extraer_noticias(data):
+                titulo = item.get("title", "")
+                link_raw = item.get("url", {}).get("href", "")
+                
+                if not titulo or not link_raw:
+                    continue
+                    
+                # FILTRO EXACTO: Solo dejamos pasar los links que contienen "/pr-" 
+                # (ej. /pr-26074-gabon-imf-staff...)
+                if "/pr-" not in link_raw.lower():
+                    continue
+                    
+                link_real = link_raw if link_raw.startswith("http") else "https://www.imf.org" + link_raw
+                
+                d_str = item.get("publicationDate", "")
+                if d_str:
+                    try:
+                        parsed_date = parser.parse(d_str)
+                        if parsed_date.tzinfo is not None: 
+                            parsed_date = parsed_date.replace(tzinfo=None)
+                        
+                        if parsed_date >= start_date and not any(r['Link'] == link_real for r in rows):
+                            rows.append({"Date": parsed_date, "Title": titulo, "Link": link_real, "Organismo": "FMI"})
+                    except: pass
+    except:
+        pass
+        
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date", ascending=False)
+    return df
+
+@st.cache_data(show_spinner=False)
+def load_country_reports_elibrary(start_date_str, end_date_str):
+    """Extractor FMI - Country Reports (Bypass de Tapestry 5 AJAX Lazy-Loading)"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    }
+    
+    try: start_date = datetime.datetime.strptime(start_date_str, '%d.%m.%Y')
+    except: start_date = datetime.datetime(2000, 1, 1)
+    
+    rows = []
+    base_domain = "https://www.elibrary.imf.org"
+    url_overview = f"{base_domain}/view/journals/002/002-overview.xml"
+    
+    try:
+        # FASE 1: Extraer los tokens dinámicos de AJAX para los años recientes
+        res = requests.get(url_overview, headers=headers, timeout=15)
+        if res.status_code != 200: return pd.DataFrame()
+        
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        ajax_links = []
+        current_year = datetime.datetime.now().year
+        # Buscamos los enlaces de expansión para el año actual y el anterior
+        target_years = [str(current_year), str(current_year - 1)] 
+        
+        for li in soup.find_all('div', attrs={'data-toc-role': 'li'}):
+            label_div = li.find('div', class_='label')
+            if not label_div: continue
+            
+            texto_label = label_div.get_text()
+            if any(year in texto_label for year in target_years):
+                a_tag = li.find('a', class_='ajax-control')
+                if a_tag and a_tag.has_attr('href'):
+                    ajax_links.append(base_domain + a_tag['href'])
+        
+        # FASE 2: Interceptar y "deshidratar" las respuestas AJAX de Tapestry
+        headers_ajax = headers.copy()
+        headers_ajax['X-Requested-With'] = 'XMLHttpRequest' # Engañamos al framework
+        headers_ajax['Accept'] = 'application/json, text/javascript, */*; q=0.01'
+        
+        for ajax_url in ajax_links:
+            try:
+                res_ajax = requests.get(ajax_url, headers=headers_ajax, timeout=15)
+                if res_ajax.status_code != 200: continue
+                
+                data = res_ajax.json()
+                
+                # Extraemos el HTML inyectado dentro del nodo "zones"
+                html_fragment = ""
+                if "zones" in data:
+                    for zone_id, html_content in data["zones"].items():
+                        html_fragment += html_content
+                        
+                if not html_fragment: continue
+                
+                # FASE 3: Parsear el HTML revelado
+                soup_fragment = BeautifulSoup(html_fragment, 'html.parser')
+                
+                for a_tag in soup_fragment.find_all('a', href=True):
+                    href = a_tag['href']
+                    titulo = a_tag.get_text(strip=True)
+                    
+                    # Filtro de sanidad: debe ser un artículo real
+                    if '/view/journals/002/' in href and len(titulo) > 15:
+                        link_real = base_domain + href if href.startswith('/') else href
+                        
+                        # Buscamos la fecha subiendo hasta 3 niveles en el DOM
+                        date_str = ""
+                        for padre in a_tag.find_parents(['div', 'li'], limit=3):
+                            texto_padre = padre.get_text(separator=" ", strip=True)
+                            
+                            # Caza fechas en formatos "Mar 05, 2026" o "05 March 2026"
+                            match = re.search(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}?,?\s*\d{4}', texto_padre)
+                            if not match:
+                                match = re.search(r'\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}', texto_padre)
+                                
+                            if match:
+                                date_str = match.group(0)
+                                break # Encontramos la fecha, salimos del bucle
+                                
+                        parsed_date = None
+                        if date_str:
+                            try:
+                                parsed_date = parser.parse(date_str)
+                                if parsed_date.tzinfo is not None: parsed_date = parsed_date.replace(tzinfo=None)
+                            except: pass
+                            
+                        # Evaluación final
+                        if parsed_date and parsed_date >= start_date:
+                            if not any(r['Link'] == link_real for r in rows):
+                                rows.append({"Date": parsed_date, "Title": titulo, "Link": link_real, "Organismo": "FMI"})
+            except:
+                continue # Aislamiento de fallos
+                
+    except Exception as e:
+        pass
+        
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date", ascending=False)
+    return df
 
 @st.cache_data(show_spinner=False)
 def load_pub_inst_fmi(start_date_str, end_date_str):
@@ -1185,7 +1366,21 @@ if modo_app == "Boletín":
                     if org == "BPI": df = load_pub_inst_bpi(sd, ed)
                     elif org == "CEF": df = load_pub_inst_cef(sd, ed)
                     elif org == "BM": df = load_pub_inst_bm(sd, ed)
-                    elif org == "FMI": df = load_pub_inst_fmi(sd, ed) # <--- AGREGA ESTA LÍNEA
+                    elif org == "FMI": 
+                        # 1. Los Gigantes Estáticos (Next.js Data JSON)
+                        df_flagships = load_pub_inst_fmi(sd, ed)
+                        
+                        # 2. Los Comunicados (Next.js News JSON)
+                        df_prs = load_press_releases_fmi(sd, ed)
+                        
+                        # 3. Los Country Reports (Tapestry AJAX Interception)
+                        df_crs = load_country_reports_elibrary(sd, ed)
+                        
+                        dfs_a_unir = [d for d in [df_flagships, df_prs, df_crs] if not d.empty]
+                        if dfs_a_unir:
+                            df = pd.concat(dfs_a_unir, ignore_index=True)
+                            df = df.sort_values("Date", ascending=False)
+                            
                 except Exception as e: pass 
                 
                 if not df.empty:
@@ -1314,7 +1509,16 @@ elif modo_app == "Categorías":
                         if o == "BPI": df = load_pub_inst_bpi(sd, ed)
                         elif o == "CEF": df = load_pub_inst_cef(sd, ed)
                         elif o == "BM": df = load_pub_inst_bm(sd, ed)
-                        elif o == "FMI": df = load_pub_inst_fmi(sd, ed) # <--- AGREGA ESTA LÍNEA
+                        elif o == "FMI": 
+                            # Extraemos ambas fuentes de datos para el FMI
+                            df_flagships = load_pub_inst_fmi(sd, ed)
+                            df_prs = load_press_releases_fmi(sd, ed)
+                            
+                            # Juntamos las tablas de forma segura
+                            dfs_a_unir = [d for d in [df_flagships, df_prs] if not d.empty]
+                            if dfs_a_unir:
+                                df = pd.concat(dfs_a_unir, ignore_index=True)
+                                df = df.sort_values("Date", ascending=False)
                         
                 except Exception as e:
                     pass
@@ -1331,8 +1535,7 @@ elif modo_app == "Categorías":
             progreso.empty()
             
             if dfs_comb:
-                f_df = pd.concat(dfs_comb, ignore_index=True)
-                
+                f_df = pd.concat(dfs_comb, ignore_index=True)              
                 # --- FORMATO HOMOGÉNEO (IGUAL AL BOLETÍN) ---
                 f_df['Categoría'] = tipo_doc
                 if tipo_doc == "Discursos":
